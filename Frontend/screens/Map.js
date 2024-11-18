@@ -17,7 +17,7 @@ const EmergencyCare = () => {
   }, []);
 
   // Google Maps Embed API URL
-  const googleMapsEmbedUrl = `https://www.google.com/maps/embed/v1/place?key=AIzaSyBHUKEUeJaVRo-6FOkNDkcWEFi1N2TlHHw&q=${userLocation.lat},${userLocation.long}`;
+  const googleMapsEmbedUrl = `https://www.google.com/maps/embed/v1/place?key=key&q=${userLocation.lat},${userLocation.long}`;
 
   return (
     <View style={styles.container}>
