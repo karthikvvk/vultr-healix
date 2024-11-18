@@ -1,167 +1,245 @@
-import React, { useState } from 'react';
-import { View, TextInput, Button, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
-import axios from 'axios';
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+  Animated,
+  ActivityIndicator
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const SignInPage = ({ navigation }) => {
+const AuthScreen = ({navigation}) => {
+  const [screen, setScreen] = useState('login'); // Tracks login, signup, or otp screens
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
   const [phone, setPhone] = useState('');
-  const [isRegistering, setIsRegistering] = useState(false);
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [otp, setOtp] = useState('');
+  const [timer, setTimer] = useState(60);
+  const [resendEnabled, setResendEnabled] = useState(false);
   const [loading, setLoading] = useState(false);
+  const shakeAnim = useState(new Animated.Value(0))[0];
 
-  // Helper function to show alert messages
-  const showAlert = (title, message) => {
-    Alert.alert(title, message);
+
+  // Trigger shake animation for input validation
+  const shakeInput = () => {
+    Animated.sequence([
+      Animated.timing(shakeAnim, { toValue: 10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 0, duration: 50, useNativeDriver: true })
+    ]).start();
   };
 
-  const handleExistingUser = async () => {
+  const showAlert = (title, message) => Alert.alert(title, message);
+
+  // Handle login
+  const handleLogin = async () => {
     if (!email || !password) {
       showAlert('Error', 'Please enter both email and password.');
+      shakeInput();
       return;
     }
 
     setLoading(true);
     try {
-      const response = await axios.post('http://10.10.25.1:5000/api/auth/login', { email, password });
-      const token = response.data.token;
-      if (token) {
-        await AsyncStorage.setItem('token', token); // Save JWT token
-        showAlert('Login Successful', 'You are now logged in.');
-        navigation.replace('Home'); // Navigate to Home if login is successful
+      const response = await fetch('http://localhost:5000/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await response.json();
+      console.log(data);
+      if (data.message === "success") {
+        await AsyncStorage.setItem('token', data.token);
+        navigation.navigate('Home');
+        setTimer(60);
+        setResendEnabled(false);
       } else {
-        showAlert('Error', 'No token received. Please try again.');
+        showAlert('Error', data.message || 'An error occurred during login.');
       }
     } catch (error) {
-      console.error(error);
-      showAlert('Error', error.response?.data?.message || 'An error occurred during login.');
+      showAlert('Error', error.message || 'An error occurred during login.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleNewRegister = async () => {
-    if (!username || !email || !phone || !password) {
-      showAlert('Error', 'Please fill in all fields.');
+  // Handle sign-up
+  const handleSignUp = async () => {
+    if (!username || !email || !phone || !password || password !== confirmPassword) {
+      showAlert('Error', 'Please fill all fields and ensure passwords match.');
+      shakeInput();
       return;
     }
 
     setLoading(true);
     try {
-      const response = await axios.post('http://10.10.25.1:5000/api/auth/register', { username, email, password, phone });
-      const token = response.data.token;
-      console.log(token);
-      if (token) {
-        await AsyncStorage.setItem('token', token); // Save JWT token
-        showAlert('Registration Successful', 'You are now registered and logged in.');
-        navigation.replace('Home'); // Navigate to Home after successful registration
+      const response = await fetch('http://localhost:5000/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, email, password, phone })
+      });
+      const data = await response.json();
+      console.log(data);
+      if (data.message === "success") {
+        await AsyncStorage.setItem('token', data.token);
+        showAlert('Signup successful! Please log in.');
+        navigation.navigate('Home');
       } else {
-        showAlert('Error', 'Registration failed. Please try again.');
+        showAlert('Error', data.message || 'An error occurred during registration.');
       }
     } catch (error) {
-      console.error(error);
-      showAlert('Error', error.response?.data?.message || 'An error occurred during registration.');
+      showAlert('Error', error.message || 'An error occurred during registration.');
     } finally {
       setLoading(false);
     }
   };
+
+
+
+  // Render login form
+  const renderLogin = () => (
+    <Animated.View style={[styles.container, { transform: [{ translateX: shakeAnim }] }]}>
+      <Text style={styles.title}>Login</Text>
+      <InputField icon="mail" placeholder="Email" value={email} onChangeText={setEmail} keyboardType="email-address" />
+      <InputField icon="lock-closed" placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry />
+      <AuthButton text="Login" onPress={handleLogin} loading={loading} />
+      <SwitchAuthText onPress={() => setScreen('signup')} text="Don't have an account? Sign Up" />
+    </Animated.View>
+  );
+
+  // Render sign-up form
+  const renderSignUp = () => (
+    <Animated.View style={[styles.container, { transform: [{ translateX: shakeAnim }] }]}>
+      <Text style={styles.title}>Sign Up</Text>
+      <InputField icon="person" placeholder="Username" value={username} onChangeText={setUsername} />
+      <InputField icon="mail" placeholder="Email" value={email} onChangeText={setEmail} keyboardType="email-address" />
+      <InputField icon="call" placeholder="Phone" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
+      <InputField icon="lock-closed" placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry />
+      <InputField icon="lock-closed" placeholder="Confirm Password" value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry />
+      <AuthButton text="Sign Up" onPress={handleSignUp} loading={loading} />
+      <SwitchAuthText onPress={() => setScreen('login')} text="Already have an account? Login" />
+    </Animated.View>
+  );
+
+
 
   return (
-    <View style={styles.container}>
-      {isRegistering ? (
-        <>
-          <TextInput
-            style={styles.input}
-            placeholder="Username"
-            value={username}
-            onChangeText={setUsername}
-            editable={!loading}
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Email"
-            value={email}
-            onChangeText={setEmail}
-            editable={!loading}
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Phone"
-            value={phone}
-            onChangeText={setPhone}
-            editable={!loading}
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Password"
-            secureTextEntry
-            value={password}
-            onChangeText={setPassword}
-            editable={!loading}
-          />
-          <Button title="Register" onPress={handleNewRegister} disabled={loading} />
-        </>
-      ) : (
-        <>
-          <TextInput
-            style={styles.input}
-            placeholder="Email"
-            value={email}
-            onChangeText={setEmail}
-            editable={!loading}
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Password"
-            secureTextEntry
-            value={password}
-            onChangeText={setPassword}
-            editable={!loading}
-          />
-          <Button title="Sign In" onPress={handleExistingUser} disabled={loading} />
-        </>
-      )}
-
-      {loading && <ActivityIndicator size="large" color="#0000ff" style={styles.loader} />}
-
-      <View style={styles.linkContainer}>
-        <TouchableOpacity onPress={() => setIsRegistering(!isRegistering)}>
-          <Text style={styles.linkText}>
-            {isRegistering ? 'Already have an account? Sign In' : 'New to the app? Register here'}
-          </Text>
-        </TouchableOpacity>
-      </View>
+    <View style={styles.wrapper}>
+      {screen === 'login' && renderLogin()}
+      {screen === 'signup' && renderSignUp()}
     </View>
   );
 };
 
+// Reusable Input Field with Icon
+const InputField = ({ icon, secureTextEntry: isPasswordField, ...props }) => {
+  const [isSecure, setIsSecure] = useState(isPasswordField);
+
+  return (
+    <View style={[styles.inputContainer, { alignItems: 'center' }]}>
+      <Ionicons name={icon} size={20} color="#666" style={styles.icon} />
+      <TextInput
+        style={[styles.input, { marginRight: isPasswordField ? 10 : 0 }]}
+        secureTextEntry={isPasswordField && isSecure}
+        {...props}
+      />
+      {isPasswordField && (
+        <TouchableOpacity
+          onPress={() => setIsSecure(!isSecure)}
+          style={{ padding: 5 }}
+        >
+          <Ionicons name={isSecure ? 'eye-off' : 'eye'} size={20} color="#666" />
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+};
+
+
+// Auth Button Component with updated color and size
+const AuthButton = ({ text, onPress, loading }) => (
+  <TouchableOpacity style={styles.button} onPress={onPress} disabled={loading}>
+    {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{text}</Text>}
+  </TouchableOpacity>
+);
+
+// Switch between login and signup
+const SwitchAuthText = ({ text, onPress }) => (
+  <TouchableOpacity onPress={onPress}>
+    <Text style={styles.linkText}>{text}</Text>
+  </TouchableOpacity>
+);
+
 const styles = StyleSheet.create({
-  container: {
+  wrapper: {
     flex: 1,
     justifyContent: 'center',
-    padding: 16,
-    backgroundColor: '#fff',
+    alignItems: 'center',
+    backgroundColor: '#f2f5f8',
+    padding: 20,
+  },
+  container: {
+    width: '100%',
+    maxWidth: 450,
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    padding: 20,
+    borderRadius: 12,
+    elevation: 6,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 30,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#ccc',
+    marginBottom: 16,
+    paddingHorizontal: 5,
+    width: '100%',
   },
   input: {
+    flex: 1,
     height: 40,
-    borderColor: '#ddd',
-    borderWidth: 1,
-    marginBottom: 12,
+    fontSize: 16,
     paddingLeft: 10,
-    borderRadius: 5,
   },
-  linkContainer: {
-    marginTop: 20,
-    alignItems: 'center',
+  icon: {
+    marginRight: 10,
+  },
+  confirmInput: {
+    marginBottom: 20,
+  },
+  button: {
+    backgroundColor: '#007bff',
+    paddingVertical: 12,
+    paddingHorizontal: 40,
+    borderRadius: 8,
+    marginBottom: 20,
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
   },
   linkText: {
     color: '#007bff',
-    textDecorationLine: 'underline',
+    fontSize: 14,
   },
-  loader: {
-    marginTop: 20,
+  timerText: {
+    color: '#666',
+    marginBottom: 10,
   },
 });
 
-export default SignInPage;
+export default AuthScreen;
